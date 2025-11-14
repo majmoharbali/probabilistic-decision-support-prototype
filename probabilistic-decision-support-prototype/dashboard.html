@@ -1,0 +1,780 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Enhanced SHM Live Dashboard</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns/dist/chartjs-adapter-date-fns.bundle.min.js"></script>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --success-color: #16a34a;
+            --warning-color: #ea580c;
+            --danger-color: #dc2626;
+            --background: #f8fafc;
+            --card-bg: #ffffff;
+            --text-primary: #1e293b;
+            --text-secondary: #64748b;
+            --border-color: #e2e8f0;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; 
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 100%);
+            color: var(--text-primary);
+            line-height: 1.6;
+        }
+        .header {
+            background: linear-gradient(135deg, var(--primary-color) 0%, #1d4ed8 100%);
+            color: white; padding: 1rem 2rem; box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            position: sticky; top: 0; z-index: 100;
+        }
+        .header h1 { font-size: 1.5rem; font-weight: 700; display: flex; align-items: center; gap: 0.5rem; }
+        .dashboard {
+            max-width: 1400px; margin: 0 auto; padding: 1.5rem;
+            display: grid; grid-template-columns: repeat(12, 1fr); gap: 1rem;
+        }
+        .card {
+            background: var(--card-bg); border-radius: 12px; padding: 1.5rem;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02), 0 8px 16px rgba(0,0,0,0.06);
+            border: 1px solid var(--border-color); position: relative;
+        }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; padding-bottom: 0.75rem; border-bottom: 1px solid var(--border-color); }
+        .card-title { font-size: 1rem; font-weight: 600; }
+        .card-subtitle { font-size: 0.75rem; color: var(--text-secondary); }
+
+        .action-panel {
+            grid-column: span 12; display: flex; align-items: center; gap: 1.5rem;
+            border-left-width: 5px; transition: border-color 0.3s ease;
+        }
+        .action-panel-icon { font-size: 2.5rem; }
+        .action-panel-text h3 { font-size: 1.125rem; margin-bottom: 0.25rem; }
+        .action-panel-text p { font-size: 0.875rem; color: var(--text-secondary); }
+        .action-healthy { border-left-color: var(--success-color); }
+        .action-warning { border-left-color: var(--warning-color); }
+        .action-danger { border-left-color: var(--danger-color); }
+        
+        .interpretation-content { display: flex; flex-direction: column; gap: 0.75rem; }
+        .interpretation-content strong { color: var(--primary-color); }
+        .interpretation-content .conclusion { font-weight: 600; font-size: 1.1rem; }
+        .interpretation-content ul { margin-left: 1.5rem; margin-top: 0.5rem; }
+        .interpretation-content li { margin-bottom: 0.5rem; }
+        
+        .sensor-consensus-card .sensor-diagram { margin-bottom: 1rem; }
+        .sensor-consensus-card .sensor-legend { display: flex; justify-content: space-around; font-size: 0.8rem; }
+        
+        .sensor-details-grid {
+            display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; text-align: center;
+        }
+        .sensor-details-item { padding: 1rem; background: #f8fafc; border-radius: 8px; }
+        .sensor-details-item .sensor-id { font-weight: 700; font-size: 1.25rem; }
+        .sensor-details-item .sensor-status { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.5px; padding: 0.1rem 0.5rem; border-radius: 10px; display: inline-block; margin: 0.25rem 0; }
+        .sensor-details-item .sensor-feature { font-size: 0.8rem; color: var(--text-secondary); }
+        .sensor-details-item .sensor-feature-value { font-size: 1.1rem; font-weight: 600; color: var(--primary-color); }
+        .status-online { background-color: #dcfce7; color: var(--success-color); }
+        .status-offline { background-color: #e2e8f0; color: var(--text-secondary); }
+
+        .structural-health { grid-column: span 4; }
+        .power-system { grid-column: span 4; }
+        .network-status { grid-column: span 4; }
+        .alert-management { grid-column: span 7; }
+        .sensor-consensus-card { grid-column: span 5; }
+        .sensor-details-card { grid-column: span 12; }
+        .sensor-card { grid-column: span 4; }
+        .status-indicator { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.25rem 0.75rem; border-radius: 20px; font-size: 0.875rem; font-weight: 500; }
+        .status-healthy { background: #dcfce7; color: var(--success-color); }
+        .status-incipient { background: #fef3c7; color: var(--warning-color); }
+        .status-severe { background: #fecaca; color: var(--danger-color); }
+        .metric-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 1rem; }
+        .metric-item { text-align: center; padding: 0.75rem; background: #f8fafc; border-radius: 8px; }
+        .metric-value { font-size: 1.5rem; font-weight: 700; color: var(--primary-color); }
+        .metric-label { font-size: 0.75rem; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; }
+        .confidence-bar { width: 100%; height: 8px; background: #e2e8f0; border-radius: 4px; overflow: hidden; margin: 0.5rem 0; }
+        .confidence-fill { height: 100%; transition: width 0.3s ease; border-radius: 4px; }
+        .confidence-healthy { background: var(--success-color); }
+        .confidence-incipient { background: var(--warning-color); }
+        .confidence-severe { background: var(--danger-color); }
+        .alert-item { display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem; background: #f8fafc; border-radius: 8px; margin-bottom: 0.5rem; border-left: 4px solid var(--border-color); }
+        .chart-container { position: relative; height: 250px; margin-top: 1rem; }
+    </style>
+</head>
+<body>
+    <div class="header"><h1>🏗️ SHM Decision Support Dashboard</h1></div>
+
+    <div class="dashboard">
+        <div class="card action-panel" id="action-panel">
+            <div class="action-panel-icon" id="action-icon">--</div>
+            <div class="action-panel-text">
+                <h3 id="action-title">Initializing...</h3>
+                <p id="action-recommendation">Waiting for system data...</p>
+            </div>
+        </div>
+
+        <div class="card structural-health">
+            <div class="card-header"><div class="card-title">🏗️ Fused Health Status</div></div>
+            <div id="health-status-container"><div class="status-indicator" id="health-status">Loading...</div></div>
+            <div id="confidence-breakdown">
+                <div style="margin-top: 1rem;"><div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;"><span>Healthy</span><span id="confidence-healthy">--%</span></div><div class="confidence-bar"><div class="confidence-fill confidence-healthy" id="bar-healthy"></div></div></div>
+                <div style="margin-top: 0.75rem;"><div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;"><span>Incipient</span><span id="confidence-incipient">--%</span></div><div class="confidence-bar"><div class="confidence-fill confidence-incipient" id="bar-incipient"></div></div></div>
+                <div style="margin-top: 0.75rem;"><div style="display: flex; justify-content: space-between; margin-bottom: 0.25rem;"><span>Severe</span><span id="confidence-severe">--%</span></div><div class="confidence-bar"><div class="confidence-fill confidence-severe" id="bar-severe"></div></div></div>
+            </div>
+        </div>
+
+        <div class="card power-system">
+            <div class="card-header"><div class="card-title">🔋 Edge Device Power</div></div>
+            <div class="metric-grid">
+                <div class="metric-item"><div class="metric-value" id="battery-percentage">--%</div><div class="metric-label">Battery</div></div>
+                <div class="metric-item"><div class="metric-value" id="solar-rate">--W</div><div class="metric-label">Solar</div></div>
+                <div class="metric-item"><div class="metric-value" id="weather">--</div><div class="metric-label">Weather</div></div>
+            </div>
+        </div>
+
+        <div class="card network-status">
+            <div class="card-header"><div class="card-title">📡 Edge Device Network</div></div>
+            <div class="metric-grid">
+                <div class="metric-item"><div class="metric-value" id="data-sent">--KB</div><div class="metric-label">Data Sent</div></div>
+                <div class="metric-item"><div class="metric-value" id="packet-loss">--%</div><div class="metric-label">Packet Loss</div></div>
+                <div class="metric-item"><div class="metric-value" id="transmission-rate">--%</div><div class="metric-label">Success</div></div>
+            </div>
+        </div>
+        
+        <div class="card alert-management">
+            <div class="card-header"><div class="card-title">📊 Sensor Consensus</div></div>
+            <div class="sensor-diagram">
+                <svg width="100%" viewBox="0 0 400 150" xmlns="http://www.w3.org/2000/svg" font-family="sans-serif">
+                    <rect x="70" y="20" width="10" height="100" fill="#9ca3af" />
+                    <rect x="320" y="20" width="10" height="100" fill="#9ca3af" />
+                    
+                    <path d="M 75 20 Q 195 90 325 20" stroke="#6b7280" stroke-width="3" fill="none" />
+                    
+                    <line x1="10" y1="100" x2="75" y2="20" stroke="#6b7280" stroke-width="3"/>
+                    <line x1="390" y1="100" x2="325" y2="20" stroke="#6b7280" stroke-width="3"/>
+
+                    <rect x="10" y="100" width="380" height="8" fill="#d1d5db" />
+                    
+                    <line x1="100" y1="23" x2="100" y2="100" stroke="#6b7280" stroke-width="1"/>
+                    <line x1="140" y1="38" x2="140" y2="100" stroke="#6b7280" stroke-width="1"/>
+                    <line x1="195" y1="58" x2="195" y2="100" stroke="#6b7280" stroke-width="1"/>
+                    <line x1="250" y1="38" x2="250" y2="100" stroke="#6b7280" stroke-width="1"/>
+                    <line x1="290" y1="23" x2="290" y2="100" stroke="#6b7280" stroke-width="1"/>
+
+                    <g text-anchor="middle">
+                        <circle id="sensor-dot-0" cx="120" cy="90" r="7" fill="#e5e7eb" stroke="#374151" stroke-width="1.5"/>
+                        <text x="120" y="80" font-size="12px" font-weight="bold" fill="#1e293b">S0</text>
+                    </g>
+
+                    <g text-anchor="middle">
+                        <circle id="sensor-dot-1" cx="195" cy="90" r="7" fill="#e5e7eb" stroke="#374151" stroke-width="1.5"/>
+                        <text x="195" y="80" font-size="12px" font-weight="bold" fill="#1e293b">S1</text>
+                    </g>
+
+                    <g text-anchor="middle">
+                        <circle id="sensor-dot-2" cx="270" cy="90" r="7" fill="#e5e7eb" stroke="#374151" stroke-width="1.5"/>
+                        <text x="270" y="80" font-size="12px" font-weight="bold" fill="#1e293b">S2</text>
+                    </g>
+                </svg>
+            </div>
+            <div class="sensor-legend">
+                <span><span style="color: var(--success-color);">●</span> Healthy</span>
+                <span><span style="color: var(--warning-color);">●</span> Incipient</span>
+                <span><span style="color: var(--danger-color);">●</span> Severe</span>
+                <span><span style="color: #9ca3af;">●</span> Offline</span>
+            </div>
+        </div>
+        
+        <div class="card sensor-consensus-card">
+            <div class="card-header"><div class="card-title">🚨 Recent Alerts</div></div>
+            <div id="alert-history-container" style="max-height: 200px; overflow-y: auto;"><div class="alert-item">No alerts yet.</div></div>
+        </div>
+        
+        <div class="card sensor-details-card">
+            <div class="card-header"><div class="card-title">📊 Sensor Status & Details</div></div>
+            <div class="sensor-details-grid" id="sensor-details-grid">
+                </div>
+        </div>
+
+        <div class="card" style="grid-column: span 12;">
+            <div class="card-header">
+                <div class="card-title">🔬 Physical Interpretation</div>
+                <div class="card-subtitle">Latest Reading from Sensor <span id="physical-explain-sensor-id">--</span></div>
+            </div>
+            <div id="physical-interpretation-content" class="interpretation-content">
+                <p>Waiting for first analysis...</p>
+            </div>
+        </div>
+        
+        <div class="card sensor-card"><div class="card-header"><div class="card-title">📈 Sensor 0: Live Signal</div></div><div class="chart-container"><canvas id="signalChart0"></canvas></div></div>
+        <div class="card sensor-card"><div class="card-header"><div class="card-title">📈 Sensor 1: Live Signal</div></div><div class="chart-container"><canvas id="signalChart1"></canvas></div></div>
+        <div class="card sensor-card"><div class="card-header"><div class="card-title">📈 Sensor 2: Live Signal</div></div><div class="chart-container"><canvas id="signalChart2"></canvas></div></div>
+        
+        <div class="card" style="grid-column: span 12;">
+            <div class="card-header"><div class="card-title">💡 Prediction Deep Dive (SHAP Values)</div></div>
+            <div class="chart-container" style="height: 300px;"><canvas id="shapChart"></canvas></div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let shapChart = null;
+        const signalCharts = [];
+        let lastReadings = {}; // Store last reading per sensor
+
+        // Chart configuration
+        const createSignalChart = (canvasId) => {
+            const ctx = document.getElementById(canvasId).getContext('2d');
+            return new Chart(ctx, {
+                type: 'line',
+                data: { labels: [], datasets: [{ data: [], borderColor: '#2563eb', backgroundColor: 'rgba(37, 99, 235, 0.1)', tension: 0.1, pointRadius: 0, borderWidth: 2, fill: true }] },
+                options: { responsive: true, maintainAspectRatio: false, animation: false, scales: { x: { display: false }, y: { beginAtZero: false, grid: { color: '#f1f5f9' }, ticks: { color: '#64748b' } } }, plugins: { legend: { display: false } } }
+            });
+        };
+        
+        function createSHAPChart() {
+            const ctx = document.getElementById('shapChart').getContext('2d');
+            shapChart = new Chart(ctx, {
+                type: 'bar',
+                data: { 
+                    labels: [], 
+                    datasets: [
+                        { 
+                            label: 'Contribution towards Damage', 
+                            data: [], 
+                            backgroundColor: 'rgba(220, 38, 38, 0.6)',
+                            borderColor: 'rgba(220, 38, 38, 1)',
+                            borderWidth: 1
+                        }, 
+                        { 
+                            label: 'Contribution towards Healthy', 
+                            data: [], 
+                            backgroundColor: 'rgba(22, 163, 74, 0.6)',
+                            borderColor: 'rgba(22, 163, 74, 1)',
+                            borderWidth: 1
+                        }
+                    ] 
+                },
+                options: { 
+                    indexAxis: 'y', 
+                    responsive: true, 
+                    maintainAspectRatio: false,
+                    interaction: {
+                        intersect: false,
+                        mode: 'index'
+                    },
+                    scales: { 
+                        x: { 
+                            stacked: true, 
+                            title: { 
+                                display: true, 
+                                text: 'SHAP Value (Impact on Prediction)',
+                                font: { size: 12 }
+                            },
+                            grid: { 
+                                color: '#f1f5f9' 
+                            },
+                            ticks: { 
+                                color: '#64748b' 
+                            }
+                        }, 
+                        y: { 
+                            stacked: true,
+                            grid: { 
+                                color: '#f1f5f9' 
+                            },
+                            ticks: { 
+                                color: '#64748b',
+                                maxTicksLimit: 10
+                            }
+                        } 
+                    }, 
+                    plugins: { 
+                        legend: { 
+                            position: 'bottom',
+                            labels: {
+                                usePointStyle: true,
+                                padding: 20
+                            }
+                        },
+                        tooltip: {
+                            callbacks: {
+                                title: function(context) {
+                                    return context[0].label;
+                                },
+                                label: function(context) {
+                                    return `${context.dataset.label}: ${context.raw.toFixed(4)}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        function initializeCharts() {
+            console.log('Initializing charts...');
+            for (let i = 0; i < 3; i++) {
+                signalCharts.push(createSignalChart(`signalChart${i}`));
+            }
+            createSHAPChart();
+            console.log('Charts initialized successfully');
+        }
+
+        // WebSocket connection
+        function connectWebSocket() {
+            console.log('Attempting WebSocket connection...');
+            ws = new WebSocket('ws://localhost:8765');
+            
+            ws.onopen = () => {
+                console.log('✅ WebSocket connected successfully');
+            };
+            
+            ws.onmessage = (event) => { 
+                try { 
+                    const data = JSON.parse(event.data);
+                    updateDashboard(data); 
+                } catch (e) { 
+                    console.error('❌ Error parsing WebSocket message:', e);
+                    console.log('Raw message:', event.data);
+                }
+            };
+            
+            ws.onclose = (event) => {
+                console.log('🔌 WebSocket connection closed, attempting to reconnect in 5 seconds...');
+                setTimeout(connectWebSocket, 5000);
+            };
+            
+            ws.onerror = (error) => {
+                console.error('❌ WebSocket error:', error);
+            };
+        }
+
+        // --- DASHBOARD UPDATE FUNCTIONS ---
+        function updateDashboard(data) {
+            try {
+                if (data.latest_reading) {
+                    lastReadings[data.latest_reading.sensor_id] = data.latest_reading;
+                }
+                
+                if (data.sensor_fusion && data.power && data.network) {
+                    updateActionPanel(data.sensor_fusion, data.power, data.network);
+                }
+                
+                if (data.sensor_fusion) {
+                    updateStructuralHealth(data.sensor_fusion);
+                }
+                
+                if (data.power) {
+                    updatePowerSystem(data.power);
+                }
+                
+                if (data.network) {
+                    updateNetworkStatus(data.network);
+                }
+                
+                if (data.alert_history) {
+                    updateAlertHistory(data.alert_history);
+                }
+                
+                if (data.sensor_fusion && data.sensor_statuses) {
+                    updateSensorConsensus(data.sensor_fusion.sensor_states, data.sensor_statuses);
+                    updateSensorDetails(data.sensor_fusion.sensor_states, data.sensor_statuses);
+                }
+
+                if (data.latest_reading) {
+                    updatePhysicalInterpretation(data.latest_reading);
+                    
+                    if (data.latest_reading.explanation) {
+                        updateSHAPChart(data.latest_reading.explanation);
+                    }
+                    
+                    updateSignalChart(data.latest_reading);
+                }
+            } catch (error) {
+                console.error('❌ Error updating dashboard:', error);
+            }
+        }
+
+        function updateActionPanel(fusionData, powerData, networkData) {
+            try {
+                const panel = document.getElementById('action-panel');
+                const icon = document.getElementById('action-icon');
+                const title = document.getElementById('action-title');
+                const recommendation = document.getElementById('action-recommendation');
+                
+                const statusMap = {
+                    0: { class: 'action-healthy', icon: '✅', title: 'System Normal', text: 'No action required. Continuous monitoring in effect.' },
+                    1: { class: 'action-warning', icon: '⚠️', title: 'Early Anomaly Detected', text: 'Recommend scheduling a visual inspection within 72 hours.' },
+                    2: { class: 'action-danger',  icon: '🚨', title: 'Critical Alert: Severe Damage Likely', text: 'Immediate site inspection required.' }
+                };
+                
+                const status = statusMap[fusionData.fused_decision] || statusMap[0];
+                const kilobytes = networkData.daily_bytes_sent / 1024;
+                const dataSentStr = kilobytes >= 1024 ? `${(kilobytes / 1024).toFixed(1)}MB` : `${kilobytes.toFixed(0)}KB`;
+                const subStatus = ` | 🔋 Power: ${powerData.battery_percentage.toFixed(0)}% (${powerData.solar_rate_w.toFixed(1)}W Solar) | 📡 Network: ${dataSentStr} Sent`;
+                
+                if (panel) panel.className = `card action-panel ${status.class}`;
+                if (icon) icon.textContent = status.icon;
+                if (title) title.textContent = status.title;
+                if (recommendation) recommendation.textContent = status.text + subStatus;
+            } catch (error) {
+                console.error('Error updating action panel:', error);
+            }
+        }
+
+        function updateSensorConsensus(sensorStates, sensorStatuses) {
+            try {
+                const colorMap = { 0: 'var(--success-color)', 1: 'var(--warning-color)', 2: 'var(--danger-color)' };
+                for (let i = 0; i < 3; i++) {
+                    const dot = document.getElementById(`sensor-dot-${i}`);
+                    if (dot && sensorStates && sensorStates[i]) {
+                        dot.style.fill = sensorStatuses[i] === 'Online' ? colorMap[sensorStates[i].class] : '#9ca3af';
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating sensor consensus:', error);
+            }
+        }
+        
+        function updateSensorDetails(sensorStates, sensorStatuses) {
+            try {
+                const grid = document.getElementById('sensor-details-grid');
+                if (!grid) return;
+                
+                const healthMap = { 0: 'Healthy', 1: 'Incipient', 2: 'Severe' };
+                const classMap = { 0: 'status-healthy', 1: 'status-incipient', 2: 'status-severe' };
+                let html = '';
+
+                for (let i = 0; i < 3; i++) {
+                    const isOnline = sensorStatuses && sensorStatuses[i] === 'Online';
+                    const lastReading = lastReadings[i];
+                    const domFreq = isOnline && lastReading && lastReading.features ? `${lastReading.features.dominant_freq.toFixed(1)} Hz` : 'N/A';
+                    const rms = isOnline && lastReading && lastReading.features ? lastReading.features.rms.toFixed(3) : 'N/A';
+                    const predictionText = isOnline && sensorStates && sensorStates[i] ? healthMap[sensorStates[i].class] : 'Offline';
+                    const predictionClass = isOnline && sensorStates && sensorStates[i] ? classMap[sensorStates[i].class] : 'status-offline';
+
+                    html += `
+                        <div class="sensor-details-item">
+                            <div class="sensor-id">Sensor ${i}</div>
+                            <div class="sensor-status ${predictionClass}">${predictionText}</div>
+                            <div class="sensor-feature">Dom. Freq: <span class="sensor-feature-value">${domFreq}</span></div>
+                            <div class="sensor-feature">RMS: <span class="sensor-feature-value">${rms}</span></div>
+                        </div>
+                    `;
+                }
+                grid.innerHTML = html;
+            } catch (error) {
+                console.error('Error updating sensor details:', error);
+            }
+        }
+
+        function updatePhysicalInterpretation(reading) {
+            try {
+                const container = document.getElementById('physical-interpretation-content');
+                const sensorIdElement = document.getElementById('physical-explain-sensor-id');
+                
+                if (sensorIdElement && reading.sensor_id !== undefined) {
+                    sensorIdElement.textContent = reading.sensor_id;
+                }
+                
+                if (!container) return;
+                
+                if (reading.text_explanation) {
+                    // Enhanced text processing to handle various formats
+                    let explanation = reading.text_explanation;
+                    
+                    // Replace markdown-style bold with HTML
+                    explanation = explanation.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+                    
+                    // Split into conclusion and evidence parts
+                    const conclusionMatch = explanation.match(/^(.*?)(?:This is due to|This assessment is based on)(.*?)$/is);
+                    
+                    let html = '';
+                    
+                    if (conclusionMatch) {
+                        // We have both conclusion and evidence
+                        const conclusion = conclusionMatch[1].replace(/^Conclusion:\s*/i, '').trim();
+                        const evidence = conclusionMatch[2].trim();
+                        
+                        html += `<div class="conclusion">${conclusion}</div>`;
+                        
+                        if (evidence) {
+                            html += `<p><strong>Key Evidence:</strong></p>`;
+                            
+                            // Check if evidence contains bullet-like structure
+                            if (evidence.includes(', a ') || evidence.includes('; a ')) {
+                                html += `<ul>`;
+                                const separator = evidence.includes(', a ') ? ', a ' : '; a ';
+                                let points = evidence.split(separator);
+                                
+                                // Clean up the first point
+                                if (points.length > 0) {
+                                    points[0] = points[0].replace(/^significant deviations in the following vibration characteristics:\s*a?\s*/i, '');
+                                }
+                                
+                                points.forEach((point) => {
+                                    if (point.trim()) {
+                                        // Clean up the point
+                                        let cleanPoint = point.trim();
+                                        if (cleanPoint.endsWith('.')) {
+                                            cleanPoint = cleanPoint.slice(0, -1);
+                                        }
+                                        html += `<li>${cleanPoint}</li>`;
+                                    }
+                                });
+                                html += `</ul>`;
+                            } else {
+                                // Simple evidence without bullet structure
+                                html += `<p>${evidence}</p>`;
+                            }
+                        }
+                    } else {
+                        // Simple format without clear separation
+                        html = `<div class="conclusion">${explanation}</div>`;
+                    }
+                    
+                    container.innerHTML = html;
+                } else {
+                    container.innerHTML = '<p>Analysis in progress...</p>';
+                }
+            } catch (error) {
+                console.error('Error formatting physical interpretation:', error);
+                const container = document.getElementById('physical-interpretation-content');
+                if (container && reading.text_explanation) {
+                    container.innerHTML = `<p>${reading.text_explanation}</p>`;
+                }
+            }
+        }
+
+        function updateStructuralHealth(fusionData) {
+            try {
+                const healthMap = { 0: 'Healthy', 1: 'Incipient Damage', 2: 'Severe Damage' };
+                const healthClassMap = { 0: 'status-healthy', 1: 'status-incipient', 2: 'status-severe' };
+                const statusEl = document.getElementById('health-status');
+                
+                if (statusEl && fusionData && fusionData.fused_decision !== undefined) {
+                    statusEl.textContent = healthMap[fusionData.fused_decision] || 'Unknown';
+                    statusEl.className = `status-indicator ${healthClassMap[fusionData.fused_decision] || 'status-healthy'}`;
+                }
+                
+                if (fusionData && fusionData.aggregated_confidence && Array.isArray(fusionData.aggregated_confidence)) {
+                    const [h, i, s] = fusionData.aggregated_confidence;
+                    
+                    const healthyEl = document.getElementById('confidence-healthy');
+                    const incipientEl = document.getElementById('confidence-incipient');
+                    const severeEl = document.getElementById('confidence-severe');
+                    const barHealthyEl = document.getElementById('bar-healthy');
+                    const barIncipientEl = document.getElementById('bar-incipient');
+                    const barSevereEl = document.getElementById('bar-severe');
+                    
+                    if (healthyEl && h !== undefined) healthyEl.textContent = `${(h * 100).toFixed(1)}%`;
+                    if (barHealthyEl && h !== undefined) barHealthyEl.style.width = `${h * 100}%`;
+                    if (incipientEl && i !== undefined) incipientEl.textContent = `${(i * 100).toFixed(1)}%`;
+                    if (barIncipientEl && i !== undefined) barIncipientEl.style.width = `${i * 100}%`;
+                    if (severeEl && s !== undefined) severeEl.textContent = `${(s * 100).toFixed(1)}%`;
+                    if (barSevereEl && s !== undefined) barSevereEl.style.width = `${s * 100}%`;
+                }
+            } catch (error) {
+                console.error('Error updating structural health:', error);
+            }
+        }
+        
+        function updatePowerSystem(powerData) {
+            try {
+                const batteryEl = document.getElementById('battery-percentage');
+                const solarEl = document.getElementById('solar-rate');
+                const weatherEl = document.getElementById('weather');
+                
+                if (batteryEl && powerData.battery_percentage !== undefined) {
+                    batteryEl.textContent = `${powerData.battery_percentage.toFixed(1)}%`;
+                }
+                if (solarEl && powerData.solar_rate_w !== undefined) {
+                    solarEl.textContent = `${powerData.solar_rate_w.toFixed(1)}W`;
+                }
+                if (weatherEl && powerData.weather) {
+                    weatherEl.textContent = powerData.weather;
+                }
+            } catch (error) {
+                console.error('Error updating power system:', error);
+            }
+        }
+
+        function updateNetworkStatus(networkData) {
+            try {
+                const bytesSent = networkData.daily_bytes_sent || 0;
+                let dataSentDisplay = '0.0 KB';
+                if (bytesSent > 0) {
+                    const kilobytes = bytesSent / 1024;
+                    dataSentDisplay = kilobytes >= 1024 ? `${(kilobytes / 1024).toFixed(2)} MB` : `${kilobytes.toFixed(1)} KB`;
+                }
+                
+                const dataSentEl = document.getElementById('data-sent');
+                const packetLossEl = document.getElementById('packet-loss');
+                const transmissionEl = document.getElementById('transmission-rate');
+                
+                if (dataSentEl) dataSentEl.textContent = dataSentDisplay;
+                if (packetLossEl && networkData.packet_loss_probability !== undefined) {
+                    packetLossEl.textContent = `${(networkData.packet_loss_probability * 100).toFixed(1)}%`;
+                }
+                if (transmissionEl && networkData.transmission_success_rate !== undefined) {
+                    transmissionEl.textContent = `${(networkData.transmission_success_rate * 100).toFixed(1)}%`;
+                }
+            } catch (error) {
+                console.error('Error updating network status:', error);
+            }
+        }
+
+        function updateAlertHistory(alertHistory) {
+            try {
+                const container = document.getElementById('alert-history-container');
+                if (!container) return;
+                
+                if (alertHistory && Array.isArray(alertHistory) && alertHistory.length > 0) {
+                    container.innerHTML = alertHistory.slice().reverse().map(alert => `
+                        <div class="alert-item" style="border-left-color: var(--${alert.level_name && alert.level_name.toLowerCase() === 'severe' ? 'danger' : 'warning'}-color)">
+                            <div style="font-weight: 600;">${alert.time || 'Unknown time'}</div>
+                            <div style="flex: 1;">${alert.level_name || 'Unknown'} damage detected</div>
+                        </div>`).join('');
+                } else {
+                    container.innerHTML = '<div class="alert-item">No alerts yet.</div>';
+                }
+            } catch (error) {
+                console.error('Error updating alert history:', error);
+            }
+        }
+
+        function updateSHAPChart(explanation) {
+            if (!shapChart) {
+                console.log('⚠️ SHAP Chart not initialized yet');
+                return;
+            }
+            
+            if (!explanation) {
+                console.log('⚠️ No explanation data provided');
+                return;
+            }
+            
+            try {
+                const { feature_names, feature_contributions } = explanation;
+                
+                if (!feature_names || !feature_contributions) {
+                    console.log('⚠️ Missing feature names or contributions in explanation');
+                    return;
+                }
+                
+                if (!Array.isArray(feature_names) || !Array.isArray(feature_contributions)) {
+                    console.log('⚠️ Feature names or contributions are not arrays');
+                    return;
+                }
+                
+                if (feature_names.length !== feature_contributions.length) {
+                    console.log('⚠️ Mismatch between feature names and contributions length');
+                    return;
+                }
+                
+                console.log('🔄 Updating SHAP chart with:', { 
+                    feature_count: feature_names.length, 
+                    features: feature_names,
+                    contributions: feature_contributions 
+                });
+                
+                // Set the labels for the Y-axis (the feature names)
+                shapChart.data.labels = feature_names.slice(); // Create a copy
+                
+                // Split the contributions into positive (damage) and negative (healthy)
+                const damageContributions = feature_contributions.map(v => Math.max(0, parseFloat(v) || 0));
+                const healthyContributions = feature_contributions.map(v => Math.min(0, parseFloat(v) || 0));
+                
+                shapChart.data.datasets[0].data = damageContributions;
+                shapChart.data.datasets[1].data = healthyContributions;
+                
+                // Update the chart with no animation for better performance
+                shapChart.update('none');
+                console.log('✅ SHAP chart updated successfully');
+                
+            } catch (error) {
+                console.error('❌ Error updating SHAP chart:', error);
+                console.log('Explanation object:', explanation);
+            }
+        }
+
+        function updateSignalChart(reading) {
+            try {
+                if (reading && reading.sensor_id !== undefined && reading.raw_signal) {
+                    const sensorId = parseInt(reading.sensor_id);
+                    if (sensorId >= 0 && sensorId < signalCharts.length) {
+                        const signalChart = signalCharts[sensorId];
+                        if (signalChart && Array.isArray(reading.raw_signal)) {
+                            signalChart.data.labels = Array.from({ length: reading.raw_signal.length }, (_, i) => i);
+                            signalChart.data.datasets[0].data = reading.raw_signal;
+                            signalChart.update('none');
+                        }
+                    }
+                }
+            } catch (error) {
+                console.error('Error updating signal chart:', error);
+            }
+        }
+        
+        // Initialize everything when the page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            console.log('🚀 Dashboard initializing...');
+            initializeCharts();
+            connectWebSocket();
+            
+            // Add a status indicator for connection
+            const header = document.querySelector('.header h1');
+            if (header) {
+                const statusIndicator = document.createElement('span');
+                statusIndicator.id = 'connection-status';
+                statusIndicator.style.cssText = 'font-size: 0.8rem; margin-left: 10px; color: #fbbf24;';
+                statusIndicator.textContent = '🔄 Connecting...';
+                header.appendChild(statusIndicator);
+            }
+            
+            // Update connection status
+            const updateConnectionStatus = (status, color, text) => {
+                const indicator = document.getElementById('connection-status');
+                if (indicator) {
+                    indicator.style.color = color;
+                    indicator.textContent = text;
+                }
+            };
+            
+            // Override WebSocket handlers to update status
+            const originalConnect = connectWebSocket;
+            connectWebSocket = () => {
+                console.log('Attempting WebSocket connection...');
+                ws = new WebSocket('ws://localhost:8765');
+                
+                ws.onopen = () => {
+                    console.log('✅ WebSocket connected successfully');
+                    updateConnectionStatus('connected', '#16a34a', '🟢 Connected');
+                };
+                
+                ws.onmessage = (event) => { 
+                    try { 
+                        const data = JSON.parse(event.data);
+                        updateDashboard(data); 
+                    } catch (e) { 
+                        console.error('❌ Error parsing WebSocket message:', e);
+                        console.log('Raw message:', event.data);
+                    }
+                };
+                
+                ws.onclose = (event) => {
+                    console.log('🔌 WebSocket connection closed, attempting to reconnect in 5 seconds...');
+                    updateConnectionStatus('disconnected', '#dc2626', '🔴 Reconnecting...');
+                    setTimeout(connectWebSocket, 5000);
+                };
+                
+                ws.onerror = (error) => {
+                    console.error('❌ WebSocket error:', error);
+                    updateConnectionStatus('error', '#dc2626', '🔴 Connection Error');
+                };
+            };
+            
+            connectWebSocket();
+        });
+    </script>
+</body>
+</html>
